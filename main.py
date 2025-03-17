@@ -12,22 +12,25 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'aidriven-452606-ab0d220198ff.jso
 load_dotenv()
 
 def is_valid_plate(text):
-    """Check if the text matches Philippine plate number patterns."""
-    # Philippine plate patterns
-    patterns = [
-        r'^[A-Z]{3}\d{3,4}$',      # ZMC145, ABC1234
-        r'^[A-Z]{2}[A-Z0-9]\d{3,4}$',  # For plates like ZMC145
-        r'^[A-Z]{2}\d{3,4}$',      # For some special plates
-    ]
-    
+    """Check if the text matches Philippine plate number patterns and determine vehicle type."""
     # Clean the text: remove spaces and convert to uppercase
     cleaned_text = ''.join(text.split()).upper()
     
-    # Check if the cleaned text matches any of the patterns
-    for pattern in patterns:
-        if re.match(pattern, cleaned_text):
-            return True, cleaned_text
-    return False, None
+    # Car plate patterns (e.g., ABC 1234)
+    car_pattern = r'^[A-Z]{3}\d{3,4}$'
+    
+    # Motorcycle plate patterns (e.g., 123ABC)
+    motorcycle_pattern = r'^\d{3}[A-Z]{3}$'
+    
+    # Check for car plate
+    if re.match(car_pattern, cleaned_text):
+        return True, cleaned_text, 'car'
+    
+    # Check for motorcycle plate
+    if re.match(motorcycle_pattern, cleaned_text):
+        return True, cleaned_text, 'motorcycle'
+    
+    return False, None, None
 
 def detect_text(image_content):
     """Detects text in the image content and filters for plate numbers."""
@@ -43,13 +46,13 @@ def detect_text(image_content):
         full_text = texts[0].description
         # Split the text into lines and process each line
         for line in full_text.split('\n'):
-            is_plate, formatted_plate = is_valid_plate(line)
+            is_plate, formatted_plate, vehicle_type = is_valid_plate(line)
             if is_plate:
-                print(f'Found plate number: {formatted_plate}')
+                print(f'Found {vehicle_type} plate number: {formatted_plate}')
                 vertices = (['({},{})'.format(vertex.x, vertex.y)
                            for vertex in texts[0].bounding_poly.vertices])
                 print('bounds: {}'.format(','.join(vertices)))
-                return formatted_plate
+                return formatted_plate, vehicle_type
 
     if response.error.message:
         raise Exception(
@@ -57,7 +60,7 @@ def detect_text(image_content):
             'https://cloud.google.com/apis/design/errors'.format(
                 response.error.message))
     
-    return None
+    return None, None
 
 def capture_and_detect():
     """Captures frames from the camera and detects text."""
@@ -78,11 +81,12 @@ def capture_and_detect():
         image_content = buffer.tobytes()
 
         # Detect text in the frame
-        plate_number = detect_text(image_content)
+        plate_number, vehicle_type = detect_text(image_content)
         
         # If a plate number is detected, display it on the frame
         if plate_number:
-            cv2.putText(frame, plate_number, (10, 50), 
+            display_text = f'{vehicle_type.upper()}: {plate_number}'
+            cv2.putText(frame, display_text, (10, 50), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         # Display the frame
